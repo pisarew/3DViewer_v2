@@ -38,6 +38,7 @@ class OpenGLWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions {
   GLuint VAO, VBO, EBO;
   bool is_data_load_ = false;
   bool is_rotating_ = false;
+  bool is_panning_ = false;
   QPoint mouse_position_;
   QMatrix4x4 model_matrix_;
   QMatrix4x4 view_matrix_;

@@ -9,7 +9,6 @@
 #include <sstream>
 #include <QDir>
 #include <QMouseEvent>
-#include <cmath>
 
 #include "config.h"
 
@@ -158,6 +157,9 @@ void OpenGLWidget::mousePressEvent(QMouseEvent *mouse) {
   if (mouse->button() == Qt::LeftButton) {
     is_rotating_ = true;
     mouse_position_ = mouse->pos();
+  } else if (mouse->button() == Qt::RightButton) {
+    is_panning_ = true;
+    mouse_position_ = mouse->pos();
   }
 }
 
@@ -165,16 +167,30 @@ void OpenGLWidget::mouseMoveEvent(QMouseEvent *mouse) {
   if (is_rotating_ && (mouse->buttons() & Qt::LeftButton)) {
     QPoint delta = mouse->pos() - mouse_position_;
     
-    // Чувствительность вращения (можно настроить)
     float rotation_sensitivity = 0.5f;
     
-    // Вращение вокруг оси Y (горизонтальное движение мыши)
     float y_angle = delta.x() * rotation_sensitivity;
     model_matrix_.rotate(y_angle, QVector3D(0.0f, 1.0f, 0.0f));
     
-    // Вращение вокруг оси X (вертикальное движение мыши)
     float x_angle = delta.y() * rotation_sensitivity;
     model_matrix_.rotate(x_angle, QVector3D(1.0f, 0.0f, 0.0f));
+    
+    mouse_position_ = mouse->pos();
+
+    update();
+
+  } else if (is_panning_ && (mouse->buttons() & Qt::RightButton)) {
+    QPoint delta = mouse->pos() - mouse_position_;
+    
+    float pan_sensitivity = 0.1f;
+    
+    float normalized_dx = (float)delta.x() / (float)width();
+    float normalized_dy = -(float)delta.y() / (float)height();
+    
+    float pan_x = normalized_dx * pan_sensitivity * 10.0f;
+    float pan_y = normalized_dy * pan_sensitivity * 10.0f;
+    
+    model_matrix_.translate(pan_x, pan_y, 0.0f);
     
     mouse_position_ = mouse->pos();
     update();
@@ -184,6 +200,8 @@ void OpenGLWidget::mouseMoveEvent(QMouseEvent *mouse) {
 void OpenGLWidget::mouseReleaseEvent(QMouseEvent *mouse) {
   if (mouse->button() == Qt::LeftButton) {
     is_rotating_ = false;
+  } else if (mouse->button() == Qt::RightButton) {
+    is_panning_ = false;
   }
 }
 
