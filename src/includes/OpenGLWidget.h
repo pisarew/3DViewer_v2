@@ -36,6 +36,8 @@ class OpenGLWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions {
   bool is_data_load_ = false;
   QPoint mouse_position_;
   QMatrix4x4 model_matrix_;
+  QMatrix4x4 view_matrix_;
+  QMatrix4x4 projection_matrix_;
   const std::vector<GLfloat>* vertexes_ = nullptr;
   const std::vector<unsigned>* facets_ = nullptr;
 
