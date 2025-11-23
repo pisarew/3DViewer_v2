@@ -7,6 +7,7 @@
 
 #include <QOpenGLFunctions>
 #include <QOpenGLWidget>
+#include <QMouseEvent>
 #include <QtCore>
 #include <QtOpenGL>
 #include <vector>
@@ -29,11 +30,14 @@ class OpenGLWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions {
   void resizeGL(int w, int h) override;
   void paintGL() override;
   void mousePressEvent(QMouseEvent* mouse) override;
+  void mouseMoveEvent(QMouseEvent* mouse) override;
+  void mouseReleaseEvent(QMouseEvent* mouse) override;
 
  private:
   GLuint shader_program_;
   GLuint VAO, VBO, EBO;
   bool is_data_load_ = false;
+  bool is_rotating_ = false;
   QPoint mouse_position_;
   QMatrix4x4 model_matrix_;
   QMatrix4x4 view_matrix_;

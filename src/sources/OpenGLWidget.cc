@@ -8,6 +8,8 @@
 #include <iostream>
 #include <sstream>
 #include <QDir>
+#include <QMouseEvent>
+#include <cmath>
 
 #include "config.h"
 
@@ -153,7 +155,36 @@ void OpenGLWidget::InitShaderProgram() {
 }
 
 void OpenGLWidget::mousePressEvent(QMouseEvent *mouse) {
-  mouse_position_ = mouse->pos();
+  if (mouse->button() == Qt::LeftButton) {
+    is_rotating_ = true;
+    mouse_position_ = mouse->pos();
+  }
+}
+
+void OpenGLWidget::mouseMoveEvent(QMouseEvent *mouse) {
+  if (is_rotating_ && (mouse->buttons() & Qt::LeftButton)) {
+    QPoint delta = mouse->pos() - mouse_position_;
+    
+    // Чувствительность вращения (можно настроить)
+    float rotation_sensitivity = 0.5f;
+    
+    // Вращение вокруг оси Y (горизонтальное движение мыши)
+    float y_angle = delta.x() * rotation_sensitivity;
+    model_matrix_.rotate(y_angle, QVector3D(0.0f, 1.0f, 0.0f));
+    
+    // Вращение вокруг оси X (вертикальное движение мыши)
+    float x_angle = delta.y() * rotation_sensitivity;
+    model_matrix_.rotate(x_angle, QVector3D(1.0f, 0.0f, 0.0f));
+    
+    mouse_position_ = mouse->pos();
+    update();
+  }
+}
+
+void OpenGLWidget::mouseReleaseEvent(QMouseEvent *mouse) {
+  if (mouse->button() == Qt::LeftButton) {
+    is_rotating_ = false;
+  }
 }
 
 void OpenGLWidget::RotateCoordinateSystem(float angle, const QVector3D &axis) {
