@@ -7,6 +7,8 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <QDir>
+#include <QMouseEvent>
 
 #include "config.h"
 
@@ -21,31 +23,68 @@ OpenGLWidget::~OpenGLWidget() {
 void OpenGLWidget::initializeGL() {
   initializeOpenGLFunctions();
   model_matrix_.setToIdentity();
+  view_matrix_.setToIdentity();
+  view_matrix_.translate(0.0f, 0.0f, -3.0f);
+  projection_matrix_.setToIdentity();
+  int w = width();
+  int h = height();
+  if (h > 0) {
+    projection_matrix_.perspective(45.0f, (float)w / (float)h, 0.1f, 100.0f);
+  } else {
+    projection_matrix_.perspective(45.0f, 1.0f, 0.1f, 100.0f);
+  }
   InitBuffers();
   InitShaderProgram();
   glEnable(GL_DEPTH_TEST);
   glClearColor(0.784f, 0.823f, 0.819f, 1.0f);
 }
-void OpenGLWidget::resizeGL(int w, int h) { glViewport(0, 0, w, h); }
+void OpenGLWidget::resizeGL(int w, int h) {
+  glViewport(0, 0, w, h);
+  projection_matrix_.setToIdentity();
+  if (h > 0) {
+    float aspect = (float)w / (float)h;
+    projection_matrix_.perspective(45.0f, aspect, 0.1f, 100.0f);
+  }
+}
 
 void OpenGLWidget::paintGL() {
-  glClear(GL_COLOR_BUFFER_BIT);
-  if (is_data_load_) {
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  if (is_data_load_ && vertexes_ != nullptr && facets_ != nullptr) {
     glUseProgram(shader_program_);
-    glUniformMatrix4fv(glGetUniformLocation(shader_program_, "model"), 1, GL_TRUE,
+    glUniformMatrix4fv(glGetUniformLocation(shader_program_, "model"), 1, GL_FALSE,
                        model_matrix_.constData());
+    glUniformMatrix4fv(glGetUniformLocation(shader_program_, "view"), 1, GL_FALSE,
+                       view_matrix_.constData());
+    glUniformMatrix4fv(glGetUniformLocation(shader_program_, "projection"), 1, GL_FALSE,
+                       projection_matrix_.constData());
     glBindVertexArray(VAO);
-    if (IsLines())
-      glDrawElements(GL_LINES, (int)vertexes_->size(), GL_UNSIGNED_INT,
+    if (IsLines() && !facets_->empty())
+      glDrawElements(GL_LINES, (int)facets_->size(), GL_UNSIGNED_INT,
                      nullptr);
-    if (IsPoints()) glDrawArrays(GL_POINTS, 0, (int)vertexes_->size());
+    if (IsPoints() && !vertexes_->empty())
+      glDrawArrays(GL_POINTS, 0, (int)(vertexes_->size() / 3));
     glBindVertexArray(0);
   }
 }
 std::optional<std::string> OpenGLWidget::GetShaderSource(
     const std::string &filename) {
-  std::ifstream file(SHADER_PATH + filename);
-  if (!file.is_open()) return std::nullopt;
+  // Try multiple paths for shader files
+  QStringList paths;
+  paths << QDir::currentPath() + "/src/sources/shaders/" + QString::fromStdString(filename);
+  paths << QDir::currentPath() + "/../src/sources/shaders/" + QString::fromStdString(filename);
+  paths << QString(SHADER_PATH) + QString::fromStdString(filename);
+  
+  std::ifstream file;
+  for (const QString& path : paths) {
+    file.open(path.toStdString());
+    if (file.is_open()) break;
+  }
+  
+  if (!file.is_open()) {
+    std::cout << "Failed to open shader file: " << filename << std::endl;
+    return std::nullopt;
+  }
+  
   std::stringstream buf;
   buf << file.rdbuf();
   std::string fileData = buf.str();
@@ -67,6 +106,7 @@ void OpenGLWidget::InitBuffers() {
 }
 void OpenGLWidget::LoadDataToBuffers() {
   if (vertexes_ == nullptr || facets_ == nullptr) return;
+  glBindVertexArray(VAO);
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
   glBufferData(GL_ARRAY_BUFFER,
                (int)(sizeof(GLfloat) * vertexes_->size()),
@@ -75,6 +115,7 @@ void OpenGLWidget::LoadDataToBuffers() {
   glBufferData(GL_ELEMENT_ARRAY_BUFFER,
                (int)(sizeof(unsigned) * facets_->size()),
                facets_->data(), GL_STATIC_DRAW);
+  glBindVertexArray(0);
   is_data_load_ = true;
 }
 void OpenGLWidget::InitShaderProgram() {
@@ -113,7 +154,55 @@ void OpenGLWidget::InitShaderProgram() {
 }
 
 void OpenGLWidget::mousePressEvent(QMouseEvent *mouse) {
-  mouse_position_ = mouse->pos();
+  if (mouse->button() == Qt::LeftButton) {
+    is_rotating_ = true;
+    mouse_position_ = mouse->pos();
+  } else if (mouse->button() == Qt::RightButton) {
+    is_panning_ = true;
+    mouse_position_ = mouse->pos();
+  }
+}
+
+void OpenGLWidget::mouseMoveEvent(QMouseEvent *mouse) {
+  if (is_rotating_ && (mouse->buttons() & Qt::LeftButton)) {
+    QPoint delta = mouse->pos() - mouse_position_;
+    
+    float rotation_sensitivity = 0.5f;
+    
+    float y_angle = delta.x() * rotation_sensitivity;
+    model_matrix_.rotate(y_angle, QVector3D(0.0f, 1.0f, 0.0f));
+    
+    float x_angle = delta.y() * rotation_sensitivity;
+    model_matrix_.rotate(x_angle, QVector3D(1.0f, 0.0f, 0.0f));
+    
+    mouse_position_ = mouse->pos();
+
+    update();
+
+  } else if (is_panning_ && (mouse->buttons() & Qt::RightButton)) {
+    QPoint delta = mouse->pos() - mouse_position_;
+    
+    float pan_sensitivity = 0.1f;
+    
+    float normalized_dx = (float)delta.x() / (float)width();
+    float normalized_dy = -(float)delta.y() / (float)height();
+    
+    float pan_x = normalized_dx * pan_sensitivity * 10.0f;
+    float pan_y = normalized_dy * pan_sensitivity * 10.0f;
+    
+    model_matrix_.translate(pan_x, pan_y, 0.0f);
+    
+    mouse_position_ = mouse->pos();
+    update();
+  }
+}
+
+void OpenGLWidget::mouseReleaseEvent(QMouseEvent *mouse) {
+  if (mouse->button() == Qt::LeftButton) {
+    is_rotating_ = false;
+  } else if (mouse->button() == Qt::RightButton) {
+    is_panning_ = false;
+  }
 }
 
 void OpenGLWidget::RotateCoordinateSystem(float angle, const QVector3D &axis) {
@@ -123,8 +212,8 @@ void OpenGLWidget::RotateCoordinateSystem(float angle, const QVector3D &axis) {
 
 void OpenGLWidget::InitModelMatrix() { model_matrix_.setToIdentity(); }
 
-bool OpenGLWidget::IsLines() const { return vertexes_ != nullptr; }
-bool OpenGLWidget::IsPoints() const { return facets_ != nullptr; }
+bool OpenGLWidget::IsLines() const { return facets_ != nullptr && !facets_->empty(); }
+bool OpenGLWidget::IsPoints() const { return vertexes_ != nullptr && !vertexes_->empty(); }
 
 void OpenGLWidget::SetVertexes(const std::vector<GLfloat> *vertexes) {
   vertexes_ = vertexes;
